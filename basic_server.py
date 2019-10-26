@@ -5,50 +5,79 @@ import threading
 #basic socket setup
 OUR_IP = '127.0.0.1'
 OUR_PORT = 1234
-
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((OUR_IP, OUR_PORT))
 server_socket.listen(5)
 
+#dictionary to map addresses to usernames
+ADDRESS_TO_NAME = {}
+CLIENTS = []
+
 print(f"[*] Listening on {OUR_IP}:{OUR_PORT}")
 
-#vars for number of acks, and number of connections
-ackNum = 0
-numConnection = 0
-clients = []
 
+#this function sends a message to all connections
+def broadcast(client_socket, message):
+
+    #see if the message is from the server
+    if(client_socket == 'SERVER'):
+
+        #if so send to all connected clients
+        for c in CLIENTS:
+            if c.getpeername() in ADDRESS_TO_NAME:
+                c.send(bytes(message, 'utf-8'))
+
+    #check if message is from connection
+    else:
+
+        #send to all connections that are not the sender
+        for c in CLIENTS:
+            if c.getpeername() != client_socket.getpeername():
+                messageToSend = f"{ADDRESS_TO_NAME[client_socket.getpeername()]}> " + message
+                c.send(bytes(messageToSend, 'utf-8'))
+
+
+#function to send and receive data to client
 def handleClient(client_socket):
     while True:
-        message = client_socket.recv(1024).decode('utf-8')
-        print(message)
-        for c in clients:
-            if c.getpeername() != client_socket.getpeername():
-                #send back an ack with an id
-                #ack = f"ACK{ackNum}!"
-                message = f"{c.getpeername()}> {message}"
-                c.send(bytes(message, 'utf-8'))
+
+        #receive a message
+        try:
+            message = ""
+            message = client_socket.recv(1024).decode('utf-8')
+            print(message)
+
+        #if a client leaves
+        except ConnectionResetError:
+
+            #remove the clients from our lists and inform the other connections
+            print(f"[-] Connection closed from {client_socket.getpeername()}")
+            CLIENTS.remove(client_socket)
+            broadcast("SERVER", f"SERVER> {ADDRESS_TO_NAME[client_socket.getpeername()]} has left the chat.")
+            ADDRESS_TO_NAME.pop(client_socket.getpeername(), None)
+            return
+
+        #checks for format of message. 
+        tester = message.split('~')
+
+        #see if we were sent a username
+        if(tester[0] == 'NAME'):
+            ADDRESS_TO_NAME[client_socket.getpeername()] = tester[1]
+            broadcast("SERVER", f"SERVER> {tester[1]} joined the chat.")
+            
+        #if not, broadcast the message
+        else:
+            broadcast(client_socket, message)
 
 
 #main server loop
 while True:
 
     #accepts one connection for testing purposes
-    if numConnection != 2:
-        client, addr = server_socket.accept()
-        numConnection +=1
-        print(f"[*] New connection from {addr[0]}:{addr[1]}")
-        clients.append(client)
+    client, addr = server_socket.accept()
+    print(f"[*] New connection from {addr[0]}:{addr[1]}")
+    CLIENTS.append(client)
 
-        handleClientThread = threading.Thread(target=handleClient, args=(client,))
-        handleClientThread.start()
-
-    # #recieve message from client
-    # message = client.recv(1024).decode('utf-8')
-    # print(message)
-
-    # for c in clients:
-    #     if c != client:
-    #         #send back an ack with an id
-    #         ack = f"ACK{ackNum}!"
-    #         client.send(bytes(ack, 'utf-8'))
-    #         ackNum += 1
+    #spawn new thread to handle client
+    handleClientThread = threading.Thread(target=handleClient, args=(client,))
+    handleClientThread.start()

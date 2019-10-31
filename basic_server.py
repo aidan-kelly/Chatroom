@@ -39,22 +39,17 @@ def broadcast(client_socket, message):
 
 #function to send and receive data to client
 def handleClient(client_socket):
+    peerName = client_socket.getpeername()
     while True:
 
-        #receive a message
         try:
             message = ""
             message = client_socket.recv(1024).decode('utf-8')
             print(message)
 
         #if a client leaves
-        except ConnectionResetError:
+        except:
 
-            #remove the clients from our lists and inform the other connections
-            print(f"[-] Connection closed from {client_socket.getpeername()}")
-            CLIENTS.remove(client_socket)
-            broadcast("SERVER", f"SERVER> {ADDRESS_TO_NAME[client_socket.getpeername()]} has left the chat.")
-            ADDRESS_TO_NAME.pop(client_socket.getpeername(), None)
             return
 
         #checks for format of message. 
@@ -64,6 +59,13 @@ def handleClient(client_socket):
         if(tester[0] == 'NAME'):
             ADDRESS_TO_NAME[client_socket.getpeername()] = tester[1]
             broadcast("SERVER", f"SERVER> {tester[1]} joined the chat.")
+
+        elif message == "EXIT" or message == "exit":
+            print(f"[-] Connection closed from {peerName}")
+            CLIENTS.remove(client_socket)
+            broadcast("SERVER", f"SERVER> {ADDRESS_TO_NAME[peerName]} has left the chat.")
+            ADDRESS_TO_NAME.pop(peerName, None)
+            return
             
         #if not, broadcast the message
         else:
